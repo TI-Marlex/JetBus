@@ -161,127 +161,184 @@
     <footer><div class="legal">© <span id="year"></span> Marlex</div></footer>
   </main>
 
-  <script>
-    // ======= CONFIG =======
-    const EXPECTED_ANSWER = "ENDOMARLEX"; // 10 letras
-    const REQUIRED_LEN    = EXPECTED_ANSWER.length;
-    // ======================
+ <script>
+  // ======= CONFIG =======
+  const EXPECTED_ANSWER = "ENDOMARLEX"; // 10 letras
+  const REQUIRED_LEN    = EXPECTED_ANSWER.length;
+  // ======================
 
-    const form   = document.getElementById('access-form');
-    const input  = document.getElementById('answer');
-    const button = document.getElementById('go');
-    const status = document.getElementById('status');
-    const slots  = document.getElementById('slots');
+  const form   = document.getElementById('access-form');
+  const input  = document.getElementById('answer');
+  const button = document.getElementById('go');
+  const status = document.getElementById('status');
+  const slots  = document.getElementById('slots');
+  const retUrlInput = document.getElementById('return_url');
 
-    document.getElementById('year').textContent = new Date().getFullYear();
+  document.getElementById('year').textContent = new Date().getFullYear();
 
-    // Constrói os "slots" de progresso
-    (function buildSlots(n){
-      const frag = document.createDocumentFragment();
-      for(let i=0;i<n;i++){ const s = document.createElement('span'); s.className = 'slot'; frag.appendChild(s); }
-      slots.innerHTML = ''; slots.appendChild(frag);
-    })(REQUIRED_LEN);
+  // Constrói os "slots" de progresso
+  (function buildSlots(n){
+    const frag = document.createDocumentFragment();
+    for(let i=0;i<n;i++){ const s = document.createElement('span'); s.className = 'slot'; frag.appendChild(s); }
+    slots.innerHTML = ''; slots.appendChild(frag);
+  })(REQUIRED_LEN);
 
-    input.setAttribute('maxlength', REQUIRED_LEN);
+  input.setAttribute('maxlength', REQUIRED_LEN);
 
-    // ---------- CAPTURA RAW DA QUERY (sem decodificar/recodificar) ----------
-    const rawQS = location.search.startsWith('?') ? location.search.slice(1) : '';
+  // ---------- CAPTURA RAW DA QUERY (sem decodificar/recodificar) ----------
+  const rawQS = location.search.startsWith('?') ? location.search.slice(1) : '';
 
-    // Lê um parâmetro da query preservando o encoding original
-    function getParamRaw(name){
-      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re  = new RegExp('(?:^|&)' + esc + '=([^&]*)');
-      const m   = rawQS.match(re);
-      return m ? m[1] : null; // retorna o valor codificado (%XX), sem mexer
-    }
+  // Lê um parâmetro da query preservando o encoding original
+  function getParamRaw(name){
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re  = new RegExp('(?:^|&)' + esc + '=([^&]*)');
+    const m   = rawQS.match(re);
+    return m ? m[1] : null; // valor codificado (%XX), sem mexer
+  }
+  function safeDecode(v){ try{ return decodeURIComponent(v); }catch{ return v; } }
+  const isIPv4 = (h)=>/^(?:\d{1,3}\.){3}\d{1,3}$/.test(h);
 
-    // Tenta montar o endpoint de login do AP:
-    // 1) se houver ga_srvr → http://<ga_srvr>:880/cgi-bin/hotspot_login.cgi
-    // 2) senão, usa login_url (se vier)
-    let finalLogin = null;
-    const ga_srvr_raw = getParamRaw('ga_srvr'); // IP codificado como veio do AP
-    if (ga_srvr_raw) {
-      // decodifica só para montar o host, a query continua 100% intacta
-      let host;
-      try { host = decodeURIComponent(ga_srvr_raw); } catch { host = ga_srvr_raw; }
+  // Detecta destino do login:
+  // 1) Modo AP direto: ga_srvr é IP -> http://<IP>:880/cgi-bin/hotspot_login.cgi? + query crua
+  // 2) Modo cnMaestro: ga_srvr é hostname -> https://<host>/api/v2/ext-portals/login (corpo = query crua)
+  let finalLogin = null;
+  let cnMode = false;
+  let cnLoginURL = null;
+
+  const ga_srvr_raw = getParamRaw('ga_srvr');
+  const login_url_raw = getParamRaw('login_url');
+
+  if (ga_srvr_raw){
+    const host = safeDecode(ga_srvr_raw);
+    if (isIPv4(host)){
       finalLogin = `http://${host}:880/cgi-bin/hotspot_login.cgi`;
     } else {
-      const login_url_raw = getParamRaw('login_url');
-      if (login_url_raw) {
-        try { finalLogin = decodeURIComponent(login_url_raw); } catch { finalLogin = login_url_raw; }
+      cnMode = true;
+      cnLoginURL = `https://${host.replace(/\/+$/,'')}/api/v2/ext-portals/login`;
+    }
+  } else if (login_url_raw){
+    const loginURL = safeDecode(login_url_raw);
+    if (/\/api\/v2\/ext-portals\/login/i.test(loginURL)){
+      cnMode = true; cnLoginURL = loginURL;
+    } else {
+      finalLogin = loginURL;
+    }
+  }
+
+  // Define a action no modo AP direto: hotspot_login.cgi + a QUERY INTEIRA original do AP
+  if (!cnMode && finalLogin) {
+    const glue = finalLogin.includes('?') ? '&' : '?';
+    form.action = rawQS ? `${finalLogin}${glue}${rawQS}` : finalLogin;
+  }
+
+  // (Opcional) Preenche campo de retorno se o AP tiver mandado algo tipo ?continue=...
+  (function setReturnUrl(){
+    const keys = ['continue','redir','success','u','target','url','next'];
+    for(const k of keys){
+      const v = getParamRaw(k);
+      if(v){
+        retUrlInput.value = safeDecode(v);
+        break;
       }
     }
+  })();
 
-    // Define a action: hotspot_login.cgi + a QUERY INTEIRA original do AP
-    if (finalLogin) {
-      const glue = finalLogin.includes('?') ? '&' : '?';
-      form.action = rawQS ? `${finalLogin}${glue}${rawQS}` : finalLogin;
+  // ---------- UX do quiz ----------
+  function norm(s){
+    return (s || "")
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z]/g,'');
+  }
+  function setStatus(ok, msg){
+    status.className = 'status ' + (ok ? 'ok' : 'err');
+    status.innerHTML = `<span class="dot"></span>${msg}`;
+  }
+  function lockButton(lock=true){
+    if(lock){ button.setAttribute('disabled',''); button.setAttribute('aria-disabled','true'); button.classList.remove('enabled'); }
+    else{ button.removeAttribute('disabled'); button.setAttribute('aria-disabled','false'); button.classList.add('enabled'); }
+  }
+  function fillSlots(count){
+    const children = slots.children;
+    for(let i=0;i<children.length;i++){
+      if(i < count) children[i].classList.add('filled'); else children[i].classList.remove('filled');
+    }
+  }
+
+  input.addEventListener('input', () => {
+    let val = norm(input.value).slice(0, REQUIRED_LEN);
+    input.value = val; fillSlots(val.length);
+
+    if(val.length < REQUIRED_LEN){
+      status.textContent = ''; input.classList.remove('is-correct'); lockButton(true); return;
+    }
+    if(val === EXPECTED_ANSWER){
+      input.classList.add('is-correct'); setStatus(true, 'Resposta correta!'); lockButton(false);
+    }else{
+      input.classList.remove('is-correct'); setStatus(false, 'Resposta incorreta. Tente novamente.'); lockButton(true);
+    }
+  });
+
+  form.addEventListener('submit', async (e) => {
+    const val = norm(input.value);
+    if(val.length < REQUIRED_LEN || val !== EXPECTED_ANSWER){
+      e.preventDefault();
+      setStatus(false, 'Resposta incorreta. Tente novamente.');
+      return;
     }
 
-    // (Opcional) Preenche campo de retorno se o AP tiver mandado algo do tipo ?continue=...
-    (function setReturnUrl(){
-      const keys = ['continue','redir','success','u','target','url','next'];
-      for(const k of keys){
-        const v = getParamRaw(k);
-        if(v){ try{ document.getElementById('return_url').value = decodeURIComponent(v); }catch{ document.getElementById('return_url').value = v; } break; }
-      }
-    })();
-
-    // ---------- UX do quiz ----------
-    function norm(s){
-      return (s || "")
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .toUpperCase()
-        .replace(/[^A-Z]/g,'');
+    // Sem parâmetros do AP/cnMaestro -> não prossegue
+    if(!cnMode && !finalLogin){
+      e.preventDefault();
+      setStatus(false, 'Falha: não recebi parâmetros do AP (ga_srvr/login_url). Abra http://neverssl.com para disparar o portal.');
+      return;
     }
 
-    function setStatus(ok, msg){
-      status.className = 'status ' + (ok ? 'ok' : 'err');
-      status.innerHTML = `<span class="dot"></span>${msg}`;
-    }
-    function lockButton(lock=true){
-      if(lock){ button.setAttribute('disabled',''); button.setAttribute('aria-disabled','true'); button.classList.remove('enabled'); }
-      else{ button.removeAttribute('disabled'); button.setAttribute('aria-disabled','false'); button.classList.add('enabled'); }
-    }
-    function fillSlots(count){
-      const children = slots.children;
-      for(let i=0;i<children.length;i++){
-        if(i < count) children[i].classList.add('filled'); else children[i].classList.remove('filled');
-      }
-    }
-
-    input.addEventListener('input', () => {
-      let val = norm(input.value).slice(0, REQUIRED_LEN);
-      input.value = val; fillSlots(val.length);
-
-      if(val.length < REQUIRED_LEN){
-        status.textContent = ''; input.classList.remove('is-correct'); lockButton(true); return;
-      }
-      if(val === EXPECTED_ANSWER){
-        input.classList.add('is-correct'); setStatus(true, 'Resposta correta!'); lockButton(false);
-      }else{
-        input.classList.remove('is-correct'); setStatus(false, 'Resposta incorreta. Tente novamente.'); lockButton(true);
-      }
-    });
-
-    form.addEventListener('submit', (e) => {
-      const val = norm(input.value);
-      if(val.length < REQUIRED_LEN || val !== EXPECTED_ANSWER){
-        e.preventDefault();
-        setStatus(false, 'Resposta incorreta. Tente novamente.');
-        return;
-      }
-      if(!finalLogin){
-        e.preventDefault();
-        setStatus(false, 'Falha: não recebi parâmetros do AP (ga_srvr/login_url). Tente abrir http://neverssl.com para disparar o portal.');
-        return;
-      }
+    // MODO AP DIRETO: deixa enviar normalmente (action já está com ? + query crua)
+    if(!cnMode){
       lockButton(true);
       setStatus(true, 'Validando acesso…');
-      // deixa enviar normalmente
-    });
+      return; // submit normal
+    }
 
-    input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !button.hasAttribute('disabled')) form.requestSubmit(); });
-  </script>
+    // MODO CNMAESTRO (HTTPS fim-a-fim): envia POST com body = query crua (preserva encoding)
+    e.preventDefault();
+    lockButton(true);
+    setStatus(true, 'Validando acesso com servidor seguro…');
+
+    const body = rawQS ? `${rawQS}&accept=yes` : 'accept=yes';
+    try{
+      const resp = await fetch(cnLoginURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+
+      // tenta ler JSON; se não for, segue só com o status
+      let data = null;
+      try{ data = await resp.json(); }catch{ /* pode não ser JSON */ }
+
+      // Alguns retornos têm {status:0} como sucesso
+      const okByCode = (data && typeof data.status === 'number') ? (data.status === 0) : false;
+
+      if (resp.ok || okByCode){
+        setStatus(true, 'Acesso liberado.');
+        const go = retUrlInput.value || 'http://neverssl.com';
+        setTimeout(()=>{ location.href = go; }, 500);
+      } else {
+        const msg = (data && (data.message || data.error)) ? ` (${data.message || data.error})` : '';
+        setStatus(false, 'Falha no login via cnMaestro' + msg);
+        lockButton(false);
+      }
+    } catch(err){
+      setStatus(false, 'Erro de rede/CORS ao contatar cnMaestro: ' + (err?.message || err));
+      lockButton(false);
+    }
+  });
+
+  input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !button.hasAttribute('disabled')) form.requestSubmit(); });
+</script>
+
 </body>
 </html>
+
