@@ -37,7 +37,6 @@
       padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
       position: relative; overflow-x:hidden;
     }
-    /* Aurora ampla para não cortar ao rolar */
     body::before{
       content:""; position:fixed; inset:-60vmax;
       background:
@@ -49,7 +48,6 @@
     }
     @keyframes auroraFloat{0%{transform:translate3d(0,0,0)}100%{transform:translate3d(0,-28px,0)}}
     @media (prefers-reduced-motion: reduce){ body::before{animation:none} }
-
     .card{
       width:min(100%, var(--card-max));
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)), var(--glass);
@@ -67,12 +65,10 @@
     .logo{height:72px; width:auto; border-radius:12px}
     @media (min-width:900px){ .logo{height:96px} }
     .brand{margin:0; text-align:center; font-weight:900; letter-spacing:.2px; font-size: clamp(26px, 8vw, 34px); line-height:1.05}
-
     .hero{padding: var(--sp-3) var(--sp-4) var(--sp-2) var(--sp-4); display:grid; gap: var(--sp-2)}
     .kicker{margin:0; font-size: clamp(12px, 3.2vw, 13px); text-transform:uppercase; letter-spacing:.24em; color:#d7e6ffcc; opacity:.92}
     h2{margin:0; font-size: clamp(18px, 5.5vw, 22px); line-height:1.2; font-weight:800}
     .hero p{color:var(--muted); margin:0; font-size:14px}
-
     .gate{padding: var(--sp-2) var(--sp-4) var(--sp-4) var(--sp-4); display:grid; gap: var(--sp-3)}
     .qa{
       padding: var(--sp-4);
@@ -93,17 +89,14 @@
     }
     input[type="text"]:focus{ border-color:var(--primary); box-shadow:0 0 0 8px var(--ring) }
     input[type="text"].is-correct{ border-color: var(--ok); box-shadow: 0 0 0 6px rgba(34,197,94,.22) }
-
     .slots{display:flex; gap:8px; margin-top: var(--sp-2)}
     .slot{flex:1; height:6px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; position:relative}
     .slot::after{content:""; position:absolute; inset:0; transform:scaleX(0); transform-origin:left; background: linear-gradient(90deg, var(--primary), var(--primary-2)); transition: transform .18s ease}
     .slot.filled::after{ transform:scaleX(1) }
-
     .status{display:flex; align-items:center; gap:10px; font-size:14px; min-height:22px; padding:10px 12px; border-radius:12px; border:1px solid transparent}
     .status.ok{ color:var(--ok); background: var(--ok-bg); border-color: var(--ok-brd) }
     .status.err{ color:var(--err); background: var(--err-bg); border-color: var(--err-brd) }
     .dot{ width:8px; height:8px; border-radius:999px; background:currentColor }
-
     button{
       border:0; padding:16px 18px; border-radius:14px; font-weight:800; font-size:16px; letter-spacing:.3px;
       background: linear-gradient(180deg, var(--primary), var(--primary-2));
@@ -112,10 +105,8 @@
     }
     button.enabled{ cursor:pointer; opacity:1 }
     button.enabled:active{ transform: translateY(1px) scale(.99) }
-
     footer{padding: var(--sp-3) var(--sp-4) var(--sp-4) var(--sp-4); color:var(--muted); font-size:12px; display:flex; justify-content:center; align-items:center; border-top:1px dashed rgba(255,255,255,.08)}
     .legal{opacity:.9}
-
     @media (min-width: 900px){
       :root{ --card-max: 760px }
       header{ padding: 30px 28px 18px 28px; gap: 10px }
@@ -127,12 +118,11 @@
 </head>
 <body>
   <noscript style="color:#fff;background:#b91c1c;padding:12px;border-radius:10px;margin:10px;display:block">
-    Este portal requer JavaScript para confirmar o acesso com o ponto de acesso. Ative o JavaScript e recarregue.
+    Este portal requer JavaScript para configurar o destino do formulário. Ative o JavaScript e recarregue.
   </noscript>
 
   <main class="card" role="main" aria-labelledby="brand">
     <header>
-      <!-- Usa o arquivo local do logo -->
       <img class="logo" alt="JetBus Marlex Logo" src="./logo.png" loading="eager" decoding="async">
       <h1 id="brand" class="brand">JetBus Marlex</h1>
     </header>
@@ -147,53 +137,74 @@
       <div class="qa">
         <p class="ask">Qual a melhor e mais forte linha de grampeio?</p>
 
-        <form class="form" id="access-form" autocomplete="off" novalidate>
+        <!-- FORMULÁRIO 1: Quiz e confirmação com AP via POST direto -->
+        <form class="form" id="access-form" method="POST" autocomplete="off" novalidate target="_self">
           <div>
             <label for="answer">Digite a resposta:</label>
             <div class="row">
-              <!-- MÁSCARA: E___M_____ -->
               <input id="answer" name="answer" type="text" inputmode="latin" placeholder="E___M_____" autofocus required />
               <button id="go" type="submit" disabled aria-disabled="true">Entrar no Wi-Fi</button>
             </div>
             <div class="slots" id="slots" aria-hidden="true"></div>
           </div>
-          <div id="status" class="status" aria-live="polite" role="status"></div>
+
+          <!-- Campos que alguns portais aceitam, mas são opcionais -->
+          <input type="hidden" name="accept" value="yes">
+          <!-- Apenas informativo: muitos APs ignoram -->
+          <input type="hidden" id="return_url" name="return_url" value="">
         </form>
+
+        <div id="status" class="status" aria-live="polite" role="status"></div>
       </div>
     </section>
 
-    <footer>
-      <div class="legal">© <span id="year"></span> Marlex</div>
-    </footer>
+    <footer><div class="legal">© <span id="year"></span> Marlex</div></footer>
   </main>
 
   <script>
-    // ======= CONFIGURAÇÕES =======
-    const EXPECTED_ANSWER   = "ENDOMARLEX";   // 10 letras: E N D O M A R L E X
-    const REQUIRED_LEN      = EXPECTED_ANSWER.length;
-    const FALLBACK_REDIRECT = "https://www.marlex.com.br";
-    // =============================
+    // ======= CONFIG =======
+    const EXPECTED_ANSWER = "ENDOMARLEX"; // 10 letras
+    const REQUIRED_LEN    = EXPECTED_ANSWER.length;
+    // ======================
 
     const form   = document.getElementById('access-form');
     const input  = document.getElementById('answer');
     const button = document.getElementById('go');
     const status = document.getElementById('status');
     const slots  = document.getElementById('slots');
+
     document.getElementById('year').textContent = new Date().getFullYear();
 
-    function buildSlots(n){
+    // Constrói os "slots" de progresso
+    (function buildSlots(n){
       const frag = document.createDocumentFragment();
-      for(let i=0;i<n;i++){
-        const s = document.createElement('span');
-        s.className = 'slot';
-        frag.appendChild(s);
-      }
-      slots.innerHTML = '';
-      slots.appendChild(frag);
-    }
-    buildSlots(REQUIRED_LEN);
+      for(let i=0;i<n;i++){ const s = document.createElement('span'); s.className = 'slot'; frag.appendChild(s); }
+      slots.innerHTML = ''; slots.appendChild(frag);
+    })(REQUIRED_LEN);
 
     input.setAttribute('maxlength', REQUIRED_LEN);
+
+    const params = new URLSearchParams(location.search);
+
+    // Captura possíveis nomes usados pelo AP para o endpoint de POST (login)
+    function findLoginUrl(){
+      const keys = ['login_url','wispr_login','wisprurl','ap_post','post_url','login'];
+      for(const k of keys){ const v = params.get(k); if(v) return v; }
+      return null;
+    }
+
+    // URL que o AP pode passar para voltar ao site original após sucesso
+    function getSuccessUrl(){
+      const keys = ['continue','redir','success','u','target','url','next'];
+      for(const k of keys){ const v = params.get(k); if(v) return v; }
+      return ''; // AP deve redirecionar pelo "Original URL" configurado
+    }
+
+    // Inicializa action do formulário
+    const loginURL = findLoginUrl();
+    if(loginURL){ form.action = loginURL; }
+    const successURL = getSuccessUrl();
+    if(successURL) document.getElementById('return_url').value = successURL;
 
     function norm(s){
       return (s || "")
@@ -202,128 +213,55 @@
         .replace(/[^A-Z]/g,'');
     }
 
-    // URL de sucesso (original/target) que o AP pode enviar
-    function getSuccessUrl(){
-      const u = new URL(window.location.href);
-      const keys = ['continue','redir','success','u','target','url','next'];
-      for(const k of keys){
-        const v = u.searchParams.get(k);
-        if(v) return v;
-      }
-      return FALLBACK_REDIRECT;
-    }
-
-    // *** NOVO: localizar o POST URL que o AP envia (nomes comuns variam por modo) ***
-    function findLoginUrl(){
-      const u = new URL(location.href);
-      const keys = [
-        'login_url',       // comum
-        'wispr_login',     // WISPr style
-        'wisprurl',
-        'ap_post',         // alguns ambientes
-        'post_url',
-        'login'            // fallback
-      ];
-      for(const k of keys){
-        const v = u.searchParams.get(k);
-        if(v) return v;
-      }
-      return null;
-    }
-
-    // *** NOVO: confirmar com o AP (Clickthrough) ***
-    async function confirmWithAP(loginUrl){
-      if(!loginUrl) throw new Error('Login URL ausente na querystring.');
-      // Campos opcionais: se o seu ambiente exigir, adicione aqui (ex.: accept, terms, token, etc.)
-      const formData = new FormData();
-      formData.set('accept', 'yes');
-
-      try{
-        // no-cors evita bloqueio do fetch em endpoints do AP que não expõem CORS.
-        await fetch(loginUrl, { method: 'POST', body: formData, mode: 'no-cors', redirect: 'follow' });
-        return true;
-      }catch(e){
-        console.error('[Portal] Falha ao confirmar com AP:', e);
-        return false;
-      }
-    }
-
     function setStatus(ok, msg){
       status.className = 'status ' + (ok ? 'ok' : 'err');
       status.innerHTML = `<span class="dot"></span>${msg}`;
     }
     function lockButton(lock=true){
-      if(lock){
-        button.setAttribute('disabled','');
-        button.setAttribute('aria-disabled','true');
-        button.classList.remove('enabled');
-      }else{
-        button.removeAttribute('disabled');
-        button.setAttribute('aria-disabled','false');
-        button.classList.add('enabled');
-      }
+      if(lock){ button.setAttribute('disabled',''); button.setAttribute('aria-disabled','true'); button.classList.remove('enabled'); }
+      else{ button.removeAttribute('disabled'); button.setAttribute('aria-disabled','false'); button.classList.add('enabled'); }
     }
     function fillSlots(count){
       const children = slots.children;
       for(let i=0;i<children.length;i++){
-        if(i < count) children[i].classList.add('filled');
-        else children[i].classList.remove('filled');
+        if(i < count) children[i].classList.add('filled'); else children[i].classList.remove('filled');
       }
     }
 
     input.addEventListener('input', () => {
       let val = norm(input.value).slice(0, REQUIRED_LEN);
-      input.value = val;
-      fillSlots(val.length);
+      input.value = val; fillSlots(val.length);
 
       if(val.length < REQUIRED_LEN){
-        status.textContent = '';
-        input.classList.remove('is-correct');
-        lockButton(true);
-        return;
+        status.textContent = ''; input.classList.remove('is-correct'); lockButton(true); return;
       }
-
       if(val === EXPECTED_ANSWER){
-        input.classList.add('is-correct');
-        setStatus(true, 'Resposta correta!');
-        lockButton(false);
+        input.classList.add('is-correct'); setStatus(true, 'Resposta correta!'); lockButton(false);
       }else{
-        input.classList.remove('is-correct');
-        setStatus(false, 'Resposta incorreta. Tente novamente.');
-        lockButton(true);
+        input.classList.remove('is-correct'); setStatus(false, 'Resposta incorreta. Tente novamente.'); lockButton(true);
       }
     });
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    form.addEventListener('submit', (e) => {
       const val = norm(input.value);
-      if(val.length < REQUIRED_LEN) return;
-
-      if(val !== EXPECTED_ANSWER){
-        input.classList.remove('is-correct');
+      if(val.length < REQUIRED_LEN || val !== EXPECTED_ANSWER){
+        e.preventDefault();
         setStatus(false, 'Resposta incorreta. Tente novamente.');
         return;
       }
-
+      if(!loginURL){
+        // Sem login_url não há como confirmar com o AP: oriente o usuário
+        e.preventDefault();
+        setStatus(false, 'Falha: o ponto de acesso não enviou a URL de login. Tente abrir http://neverssl.com para disparar o portal ou verifique "Prefix Query Strings" e o modo Redirect=HTTP no AP.');
+        return;
+      }
+      // Submissão direta (POST) → o AP libera e redireciona conforme "Success Action" do Cambium.
+      // Opcionalmente, desabilita botão para evitar duplo clique:
       lockButton(true);
       setStatus(true, 'Validando acesso…');
-
-      const loginUrl = findLoginUrl();
-      const ok = await confirmWithAP(loginUrl);
-      if(!ok){
-        setStatus(false, 'Não foi possível confirmar com o ponto de acesso. Verifique a configuração do portal externo no Cambium (URL de POST).');
-        lockButton(false);
-        return;
-      }
-
-      // Sucesso: libera e redireciona
-      document.cookie = "quiz_ok=1; max-age=86400; path=/; SameSite=Lax";
-      window.location.replace(getSuccessUrl());
     });
 
-    input.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' && !button.hasAttribute('disabled')) form.requestSubmit();
-    });
+    input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !button.hasAttribute('disabled')) form.requestSubmit(); });
   </script>
 </body>
 </html>
