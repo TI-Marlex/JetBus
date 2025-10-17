@@ -184,28 +184,50 @@
 
     input.setAttribute('maxlength', REQUIRED_LEN);
 
-    const params = new URLSearchParams(location.search);
+    // ---------- CAPTURA RAW DA QUERY (sem decodificar/recodificar) ----------
+    const rawQS = location.search.startsWith('?') ? location.search.slice(1) : '';
 
-    // Captura possíveis nomes usados pelo AP para o endpoint de POST (login)
-    function findLoginUrl(){
-      const keys = ['login_url','wispr_login','wisprurl','ap_post','post_url','login'];
-      for(const k of keys){ const v = params.get(k); if(v) return v; }
-      return null;
+    // Lê um parâmetro da query preservando o encoding original
+    function getParamRaw(name){
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re  = new RegExp('(?:^|&)' + esc + '=([^&]*)');
+      const m   = rawQS.match(re);
+      return m ? m[1] : null; // retorna o valor codificado (%XX), sem mexer
     }
 
-    // URL que o AP pode passar para voltar ao site original após sucesso
-    function getSuccessUrl(){
+    // Tenta montar o endpoint de login do AP:
+    // 1) se houver ga_srvr → http://<ga_srvr>:880/cgi-bin/hotspot_login.cgi
+    // 2) senão, usa login_url (se vier)
+    let finalLogin = null;
+    const ga_srvr_raw = getParamRaw('ga_srvr'); // IP codificado como veio do AP
+    if (ga_srvr_raw) {
+      // decodifica só para montar o host, a query continua 100% intacta
+      let host;
+      try { host = decodeURIComponent(ga_srvr_raw); } catch { host = ga_srvr_raw; }
+      finalLogin = `http://${host}:880/cgi-bin/hotspot_login.cgi`;
+    } else {
+      const login_url_raw = getParamRaw('login_url');
+      if (login_url_raw) {
+        try { finalLogin = decodeURIComponent(login_url_raw); } catch { finalLogin = login_url_raw; }
+      }
+    }
+
+    // Define a action: hotspot_login.cgi + a QUERY INTEIRA original do AP
+    if (finalLogin) {
+      const glue = finalLogin.includes('?') ? '&' : '?';
+      form.action = rawQS ? `${finalLogin}${glue}${rawQS}` : finalLogin;
+    }
+
+    // (Opcional) Preenche campo de retorno se o AP tiver mandado algo do tipo ?continue=...
+    (function setReturnUrl(){
       const keys = ['continue','redir','success','u','target','url','next'];
-      for(const k of keys){ const v = params.get(k); if(v) return v; }
-      return ''; // AP deve redirecionar pelo "Original URL" configurado
-    }
+      for(const k of keys){
+        const v = getParamRaw(k);
+        if(v){ try{ document.getElementById('return_url').value = decodeURIComponent(v); }catch{ document.getElementById('return_url').value = v; } break; }
+      }
+    })();
 
-    // Inicializa action do formulário
-    const loginURL = findLoginUrl();
-    if(loginURL){ form.action = loginURL; }
-    const successURL = getSuccessUrl();
-    if(successURL) document.getElementById('return_url').value = successURL;
-
+    // ---------- UX do quiz ----------
     function norm(s){
       return (s || "")
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -249,16 +271,14 @@
         setStatus(false, 'Resposta incorreta. Tente novamente.');
         return;
       }
-      if(!loginURL){
-        // Sem login_url não há como confirmar com o AP: oriente o usuário
+      if(!finalLogin){
         e.preventDefault();
-        setStatus(false, 'Falha: o ponto de acesso não enviou a URL de login. Tente abrir http://neverssl.com para disparar o portal ou verifique "Prefix Query Strings" e o modo Redirect=HTTP no AP.');
+        setStatus(false, 'Falha: não recebi parâmetros do AP (ga_srvr/login_url). Tente abrir http://neverssl.com para disparar o portal.');
         return;
       }
-      // Submissão direta (POST) → o AP libera e redireciona conforme "Success Action" do Cambium.
-      // Opcionalmente, desabilita botão para evitar duplo clique:
       lockButton(true);
       setStatus(true, 'Validando acesso…');
+      // deixa enviar normalmente
     });
 
     input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !button.hasAttribute('disabled')) form.requestSubmit(); });
